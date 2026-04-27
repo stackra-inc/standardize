@@ -1,0 +1,280 @@
+/**
+ * @fileoverview CI/CD workflow templates — setup action, CI, publish.
+ *
+ * These are NOT overwritten if they already exist — the CLI only creates
+ * them for new packages. Existing workflows are left untouched since
+ * packages may have custom CI steps.
+ *
+ * @module @stackra/standardize
+ */
+
+import { NPM_SCOPE, ORG_NAME, ORG_GITHUB } from "../config.js";
+
+/** Composite setup action — pnpm + Node + install. */
+export const TPL_SETUP_ACTION = `name: Setup
+description: Setup Node.js, pnpm, and install dependencies
+
+inputs:
+  node-version:
+    description: Node.js version to use
+    required: false
+    default: "22"
+
+runs:
+  using: composite
+  steps:
+    - name: 📦 Setup pnpm
+      uses: pnpm/action-setup@v5
+
+    - name: 🟢 Setup Node.js \${{ inputs.node-version }}
+      uses: actions/setup-node@v5
+      with:
+        node-version: \${{ inputs.node-version }}
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+
+    - name: 📥 Install dependencies
+      shell: bash
+      run: pnpm install --no-frozen-lockfile
+`;
+
+/**
+ * Generates the CI workflow for a package.
+ * Runs on push to main and PRs.
+ */
+export function tplCiWorkflow(
+  packageName: string,
+  hasLint: boolean,
+  hasTypecheck: boolean,
+  hasTest: boolean,
+): string {
+  const jobs: string[] = [];
+
+  jobs.push(`  build:
+    name: 🔨 Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-\${{ github.sha }}
+          path: dist/
+          retention-days: 3`);
+
+  if (hasTypecheck) {
+    jobs.push(`  typecheck:
+    name: 🔷 Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: pnpm typecheck`);
+  }
+
+  jobs.push(`  format:
+    name: 🎨 Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: pnpm format:check`);
+
+  if (hasLint) {
+    jobs.push(`  lint:
+    name: 🔍 Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: pnpm lint`);
+  }
+
+  if (hasTest) {
+    jobs.push(`  test:
+    name: 🧪 Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: pnpm test`);
+  }
+
+  return `name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-\${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+${jobs.join("\n\n")}
+`;
+}
+
+/**
+ * Generates the publish workflow for a package.
+ */
+export function tplPublishWorkflow(
+  packageName: string,
+  repoSlug: string,
+): string {
+  return `name: Publish
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — skip npm publish and GitHub Release'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+concurrency:
+  group: publish-\${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  validate:
+    name: ✅ Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: \${{ steps.pkg.outputs.version }}
+      tag: \${{ steps.tag.outputs.tag }}
+      is_prerelease: \${{ steps.tag.outputs.is_prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 📋 Read package version
+        id: pkg
+        run: echo "version=\$(node -p \\"require('./package.json').version\\")" >> \$GITHUB_OUTPUT
+
+      - name: 🏷️ Parse tag
+        id: tag
+        run: |
+          TAG="\$\{GITHUB_REF_NAME:-v\${{ steps.pkg.outputs.version }}}"
+          echo "tag=\$\{TAG}" >> \$GITHUB_OUTPUT
+          if [[ "\$TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+-.+ ]]; then
+            echo "is_prerelease=true" >> \$GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> \$GITHUB_OUTPUT
+          fi
+
+      - name: 🔍 Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          PKG_VERSION="\${{ steps.pkg.outputs.version }}"
+          TAG_VERSION="\${{ steps.tag.outputs.tag }}"
+          EXPECTED="v\$\{PKG_VERSION}"
+          if [ "\$TAG_VERSION" != "\$EXPECTED" ]; then
+            echo "❌ Tag '\$TAG_VERSION' does not match package.json version '\$EXPECTED'"
+            exit 1
+          fi
+
+  quality:
+    name: 🔬 Quality Gate
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: pnpm build
+      - run: pnpm format:check
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-publish-\${{ github.sha }}
+          path: dist/
+          retention-days: 7
+
+  publish:
+    name: 🚀 Publish to npm
+    runs-on: ubuntu-latest
+    needs: [validate, quality]
+    if: \${{ github.event.inputs.dry_run != 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/${packageName}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-publish-\${{ github.sha }}
+          path: dist/
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: 🔍 Check if version already published
+        id: check_version
+        run: |
+          PKG_NAME=\$(node -p "require('./package.json').name")
+          PKG_VERSION=\$(node -p "require('./package.json').version")
+          if npm view "\$\{PKG_NAME}@\$\{PKG_VERSION}" version 2>/dev/null; then
+            echo "exists=true" >> \$GITHUB_OUTPUT
+          else
+            echo "exists=false" >> \$GITHUB_OUTPUT
+          fi
+        env:
+          NODE_AUTH_TOKEN: \${{ secrets.STACKRA_NPM_TOKEN }}
+
+      - name: 🚀 Publish
+        if: steps.check_version.outputs.exists == 'false'
+        run: pnpm publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: \${{ secrets.STACKRA_NPM_TOKEN }}
+
+  release:
+    name: 📦 GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish]
+    if: \${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/') }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: 📝 Extract changelog
+        id: changelog
+        run: |
+          VERSION="\${{ needs.validate.outputs.version }}"
+          awk "/^## \$\{VERSION}|^## \\\\\[\$\{VERSION}\\\\\]/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md \\
+            | sed '/^[[:space:]]*\$/d' > release_body.md
+          if [ ! -s release_body.md ]; then echo "Release v\$\{VERSION}" > release_body.md; fi
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: \${{ needs.validate.outputs.tag }}
+          name: '\${{ needs.validate.outputs.tag }}'
+          body_path: release_body.md
+          draft: false
+          prerelease: \${{ needs.validate.outputs.is_prerelease == 'true' }}
+          make_latest: \${{ needs.validate.outputs.is_prerelease == 'false' }}
+`;
+}
