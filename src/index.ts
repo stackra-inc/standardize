@@ -24,6 +24,7 @@ import { deps } from "./commands/deps.js";
 import { update } from "./commands/update.js";
 import { setup } from "./commands/setup.js";
 import { init } from "./commands/init.js";
+import { bump } from "./commands/bump.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,13 +77,16 @@ const HELP = `
     deps       Check and install missing devDependencies
     install    Run pnpm install + husky init across packages
     verify     Run build, format:check, typecheck, lint, test
+    bump       Bump version, commit, tag, push (triggers publish workflow)
     init       Copy config templates + steering files into a consumer project
     help       Show this help
 
   Flags:
     --pkg <name>     Only process a single package (directory name)
     --root <path>    Explicit workspace root path
-    --dry-run        For deps: report but don't install
+    --dry-run        For deps/bump: report but don't apply
+    --minor          For bump: minor version bump (default: patch)
+    --major          For bump: major version bump
     --no-steering    For init: skip steering files
     --no-config      For init: skip config templates
 
@@ -147,6 +151,9 @@ function main(): void {
       break;
     case "verify":
       verify(packageDirs);
+      break;
+    case "bump":
+      bump(packageDirs, args);
       break;
     case "init":
       init(root, {
