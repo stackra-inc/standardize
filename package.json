@@ -1,6 +1,6 @@
 {
   "name": "@stackra/standardize",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI tool to audit and standardize all @stackra/* packages — configs, scripts, hooks, steering, CI",
   "private": false,
   "license": "MIT",
