@@ -14,10 +14,10 @@ importers:
     devDependencies:
       '@stackra/tsup-config':
         specifier: ^1.0.6
-        version: 1.0.6(tsup@8.5.1(tsx@4.21.0)(typescript@6.0.3))
+        version: 1.0.8(tsup@8.5.1(tsx@4.21.0)(typescript@6.0.3))
       '@stackra/typescript-config':
         specifier: ^1.0.5
-        version: 1.0.5(typescript@6.0.3)
+        version: 1.0.10(typescript@6.0.3)
       '@types/node':
         specifier: ^22.15.0
         version: 22.19.17
@@ -337,15 +337,15 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@stackra/tsup-config@1.0.6':
-    resolution: {integrity: sha512-R0bSuwXyTvV1imeohLpTfcpTQfqe3nO4nCJduN+tAvicpRUW3ETh8ddpHSDwXEfCpjL1k57PByK1JLYZl8Y1Mg==}
-    engines: {node: '>=20', pnpm: '>=9.0.0'}
+  '@stackra/tsup-config@1.0.8':
+    resolution: {integrity: sha512-kf+GBWa7OXYu5REM0lumUxf+slhg56ZRZURvQBgOBufvJkNOsf0vQxrLNMC5MboMHSiTLh6hHTdJEXChSMkCNg==}
+    engines: {node: '>=22', pnpm: '>=9.0.0'}
     peerDependencies:
       tsup: '>=8.0.0'
 
-  '@stackra/typescript-config@1.0.5':
-    resolution: {integrity: sha512-VfUBCgNd49R6LThXGA0gOykUlTkSG7SJjRyKbQLeNIuSoTI0LBEpLI13MOBtBml6KhVulgBtNq0sO/s2SsLFpQ==}
-    engines: {node: '>=20', pnpm: '>=9.0.0'}
+  '@stackra/typescript-config@1.0.10':
+    resolution: {integrity: sha512-CNUxuk9Gd4PTjdHNbzXgulAaRDIT2Vs3r1f2MjcRQ1XfdzXeU0IHWD6jUvHF9xsdFN/1jOvCMbGIStUyqZYNYg==}
+    engines: {node: '>=22', pnpm: '>=9.0.0'}
     peerDependencies:
       typescript: '>=5.0.0'
 
@@ -738,11 +738,11 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.60.2':
     optional: true
 
-  '@stackra/tsup-config@1.0.6(tsup@8.5.1(tsx@4.21.0)(typescript@6.0.3))':
+  '@stackra/tsup-config@1.0.8(tsup@8.5.1(tsx@4.21.0)(typescript@6.0.3))':
     dependencies:
       tsup: 8.5.1(tsx@4.21.0)(typescript@6.0.3)
 
-  '@stackra/typescript-config@1.0.5(typescript@6.0.3)':
+  '@stackra/typescript-config@1.0.10(typescript@6.0.3)':
     dependencies:
       typescript: 6.0.3
 
